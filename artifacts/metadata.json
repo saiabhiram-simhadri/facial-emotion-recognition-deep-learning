@@ -1,0 +1,39 @@
+{
+  "model_name": "MobileNetV2 Transfer",
+  "input_shape": [
+    48,
+    48,
+    1
+  ],
+  "pixel_intensity_range": [
+    0,
+    255
+  ],
+  "classes": [
+    "angry",
+    "disgust",
+    "fear",
+    "happy",
+    "neutral",
+    "sad",
+    "surprise"
+  ],
+  "class_indices": {
+    "angry": 0,
+    "disgust": 1,
+    "fear": 2,
+    "happy": 3,
+    "neutral": 4,
+    "sad": 5,
+    "surprise": 6
+  },
+  "global_seed": 47,
+  "test_metrics": {
+    "Model": "MobileNetV2 Transfer (Test Set)",
+    "Accuracy": 0.2068,
+    "Macro Precision": 0.2109,
+    "Macro Recall": 0.2139,
+    "Macro F1": 0.1552
+  },
+  "serialization_timestamp": "2026-11-12T20:15:38Z"
+}
