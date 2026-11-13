@@ -1,4 +1,4 @@
 Model,Accuracy,Macro Precision,Macro Recall,Macro F1
-MobileNetV2 Transfer,0.2197,0.2187,0.2156,0.1641
+Custom Deep CNN,0.4382,0.401,0.4345,0.393
+MobileNetV2 Transfer,0.3576,0.3237,0.3265,0.3116
 Majority Class Baseline,0.2613,0.0373,0.1429,0.0592
-Custom Deep CNN,0.1736,0.0248,0.1429,0.0423

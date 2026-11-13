@@ -101,7 +101,7 @@ I structured the project into nine sequential stages:
 - Consistently predicts the most frequent training category (`happy`).
 - Demonstrates why macro metrics matter: achieves 26.13% accuracy, but near-zero Macro Precision (3.73%) and Macro F1 (5.92%).
 
-### 2. Custom Deep CNN
+### 2. Custom Deep CNN (Champion Architecture)
 Designed specifically for $48 \times 48 \times 1$ inputs:
 - **In-Graph Preprocessing**: Random horizontal flips, rotations ($\pm 5\%$), zooms ($\pm 10\%$), and embedded $[0, 255] \to [0, 1]$ rescaling.
 - **Backbone**:
@@ -109,14 +109,15 @@ Designed specifically for $48 \times 48 \times 1$ inputs:
   - *Block 2*: $2\times$ `Conv2D(64, 3x3)` + `BatchNorm` + `ReLU` + `MaxPool(2x2)` + `SpatialDropout(0.25)`.
   - *Block 3 & 4*: `Conv2D(128, 3x3)` + `BatchNorm` + `ReLU` + `MaxPool(2x2)` + `SpatialDropout(0.30)`.
 - **Classification Head**: `GlobalAveragePooling2D` $\to$ `Dense(256)` + `BatchNorm` + `ReLU` + `Dropout(0.50)` $\to$ `Dense(7, softmax)`. Using Global Average Pooling instead of `Flatten()` prevented dense parameter explosion and reduced overfitting.
+- **Optimization**: Trained across full-dataset passes with Adam ($\eta = 10^{-3}$), dynamic learning rate reduction (`ReduceLROnPlateau`), early stopping, and balanced class weights.
 
 ### 3. Transfer Learning (MobileNetV2)
 Leverages pre-trained ImageNet feature extractors:
 - **Input Adapter**: In-graph channel replication $(48, 48, 1) \to (48, 48, 3)$ and bilinear resize to $(96, 96, 3)$.
 - **Two-Phase Strategy**:
-  - *Stage 1 (Feature Extraction)*: Frozen MobileNetV2 backbone; only the custom classification head trained with Adam ($\eta = 10^{-3}$).
-  - *Stage 2 (Fine-Tuning)*: Top 20 convolutional layers unfrozen with a lower learning rate ($\eta = 10^{-5}$).
-  - *Engineering Guardrail*: I kept all `BatchNormalization` layers permanently set to `training=False` during fine-tuning so that small-batch statistics would not distort ImageNet's learned running statistics.
+  - *Stage 1 (Feature Extraction)*: Frozen MobileNetV2 backbone (8 epochs); custom classification head trained with Adam ($\eta = 10^{-3}$).
+  - *Stage 2 (Fine-Tuning)*: Top 40 convolutional layers unfrozen with a lower learning rate ($\eta = 10^{-5}$) and plateau decay.
+  - *Engineering Guardrail*: Kept all `BatchNormalization` layers permanently set to `training=False` during fine-tuning to prevent small-batch sample noise from corrupting pre-trained ImageNet statistics.
 
 ---
 
@@ -126,38 +127,46 @@ Leverages pre-trained ImageNet feature extractors:
 
 | Model | Accuracy | Macro Precision | Macro Recall | Macro F1-Score | Result |
 | :--- | :---: | :---: | :---: | :---: | :--- |
-| **MobileNetV2 Transfer** | **21.97%** | **21.87%** | **21.56%** | **16.41%** | **Champion Model** |
+| **Custom Deep CNN** | **43.82%** | **40.10%** | **43.45%** | **39.30%** | **Champion Model** |
+| MobileNetV2 Transfer | 35.76% | 32.37% | 32.65% | 31.16% | Runner-up |
 | Majority Class Baseline | 26.13% | 3.73% | 14.29% | 5.92% | Baseline floor |
-| Custom Deep CNN | 17.36% | 2.48% | 14.29% | 4.23% | Sub-optimal generalization |
 
-MobileNetV2 won champion status by delivering balanced predictions across multiple emotion classes, achieving nearly triple the baseline Macro F1.
+Custom Deep CNN decisively claimed champion status by delivering the highest balanced Macro F1 (39.30%) and overall accuracy (43.82%), outperforming MobileNetV2 on this $48 \times 48$ single-channel task.
 
 ### Final Held-Out Test Evaluation (4,052 Images)
 
 | Emotion Class | Precision | Recall | F1-Score | Support |
 | :--- | :---: | :---: | :---: | :---: |
-| **Angry** | 0.2013 | 0.2173 | 0.2090 | 566 |
-| **Disgust** | 0.0000 | 0.0000 | 0.0000 | 53 |
-| **Fear** | 0.1408 | 0.3509 | 0.2010 | 570 |
-| **Happy** | 0.4088 | 0.2208 | 0.2868 | 1,046 |
-| **Neutral** | 0.2500 | 0.0510 | 0.0847 | 726 |
-| **Sad** | 0.2857 | 0.0056 | 0.0109 | 718 |
-| **Surprise** | 0.1897 | 0.6515 | 0.2938 | 373 |
-| **Overall / Macro Avg** | **0.2109** | **0.2139** | **0.1552** | **4,052** |
+| **Angry** | 0.2814 | 0.3640 | 0.3174 | 566 |
+| **Disgust** | 0.0799 | 0.5094 | 0.1381 | 53 |
+| **Fear** | 0.2551 | 0.2175 | 0.2348 | 570 |
+| **Happy** | 0.7051 | 0.6310 | 0.6660 | 1,046 |
+| **Neutral** | 0.4604 | 0.3760 | 0.4139 | 726 |
+| **Sad** | 0.4240 | 0.3106 | 0.3585 | 718 |
+| **Surprise** | 0.5125 | 0.6059 | 0.5553 | 373 |
+| **Overall / Macro Avg** | **0.3883** | **0.4306** | **0.3834** | **4,052** |
+| **Overall Accuracy** | — | — | **0.4292** | **4,052** |
 
 ### Key Confusion Matrix Insights
-- **Surprise Peak**: The model achieved its highest recall on `Surprise` (65.15%), where wide eyes and dropped jaws provide distinct visual boundaries.
-- **Fear vs. Surprise**: Both expressions share raised eyebrows and open mouths, leading to frequent mutual confusion in 48x48 grayscale.
-- **Sad vs. Neutral**: Subtle downward lip curvature is difficult to separate from a relaxed mouth at low resolution without dynamic video movement.
+- **Happy & Surprise Dominance**: The model achieved its highest precision and recall on `Happy` (70.51% precision, 63.10% recall) and `Surprise` (60.59% recall), where distinct facial cues (raised mouth corners, dropped jaws) provide unambiguous signals.
+- **Disgust Minority Recall**: Balanced class weighting enabled the model to capture **50.94% recall** on the extreme minority class (`Disgust`, 53 test images), demonstrating that the loss penalty effectively prevented the network from ignoring rare classes.
+- **Fear vs. Surprise**: Both expressions share raised eyebrows and open mouths, which are occasionally confused in $48 \times 48$ grayscale crops.
+- **Sad vs. Neutral**: Subtle downward lip curvature is occasionally misclassified as relaxed neutral expressions in low-resolution crops without video motion dynamics.
+- **Misclassification Reduction**: Total misclassifications were reduced to **2,313 / 4,052 (57.08%)**, a dramatic improvement over the initial baseline models.
 
 ---
 
 ## Production Artifacts & Deployment
 
 All production files are exported to `artifacts/`:
-- `artifacts/deepfer.keras`: Standalone serialized model with embedded preprocessing layers and trained weights (22.14 MB).
+- `artifacts/deepfer.keras`: Standalone serialized champion model with embedded preprocessing layers and trained weights (**2.12 MB**).
 - `artifacts/metadata.json`: Deployment contract defining class labels, input dimensions, normalization range, and test scores.
 - `artifacts/validation_results.csv`: Logged benchmark scores across all tested models.
+
+### CPU Latency Benchmark
+- **Mean Forward-Pass Latency**: **29.51 ms** per frame
+- **95th Percentile (P95) Latency**: **38.86 ms**
+- **Theoretical Throughput**: **33.9 FPS** (fully edge capable for real-time video streams > 30 FPS)
 
 ### Real-Time OpenCV Webcam Demo
 In the notebook, I built `run_webcam(camera_index=0)`:
@@ -211,7 +220,7 @@ facial-emotion-recognition-deep-learning/
 │       └── validation/                        # Cleaned validation images (7 classes)
 │
 ├── artifacts/                                 # Serialized production artifacts
-│   ├── deepfer.keras                          # Trained champion model (22.14 MB)
+│   ├── deepfer.keras                          # Trained champion model (2.12 MB)
 │   ├── metadata.json                          # Model contract & class mappings
 │   └── validation_results.csv                 # Model benchmark comparison table
 │
@@ -219,3 +228,11 @@ facial-emotion-recognition-deep-learning/
     ├── DeepFER_Project_Report.docx            # Documentation copy of project report
     └── report_figures/                        # Generated evaluation charts & visual plots
 ```
+
+---
+
+## Author
+
+- **Sai Abhiram Simhadri**
+- **Project**: DeepFER — Facial Emotion Recognition Using Deep Learning
+- **Repository**: [https://github.com/saiabhiram-simhadri/facial-emotion-recognition-deep-learning](https://github.com/saiabhiram-simhadri/facial-emotion-recognition-deep-learning)
